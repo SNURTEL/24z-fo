@@ -1,7 +1,10 @@
+import json
 import numpy as np
 import sys, os, time
 import sqlite3
 from pathlib import Path
+from types import ModuleType
+from typing import Type
 import torch
 import torch.nn as nn
 import fo.data as data
@@ -15,7 +18,7 @@ import fo.utils as U
 class Objective(object):
     def __init__(self, device, seed, f_maps, f_params, batch_size, splits, f_maps_norm,
                  arch, min_lr, beta1, beta2, epochs, root_out, fields, monopole,
-                 label, num_workers, params, rot_flip_in_mem, sim, smoothing):
+                 label, num_workers, params, rot_flip_in_mem, sim, smoothing, resnet_pretrained):
 
         self.device          = device
         self.seed            = seed
@@ -38,6 +41,7 @@ class Objective(object):
         self.rot_flip_in_mem = rot_flip_in_mem
         self.sim             = sim
         self.smoothing       = smoothing
+        self.resnet_pretrained  = resnet_pretrained
 
     def __call__(self, trial):
 
@@ -53,7 +57,10 @@ class Objective(object):
         max_lr = trial.suggest_float("lr", 1e-5, 5e-3, log=True)
         wd     = trial.suggest_float("wd", 1e-8, 1e-1, log=True)
         dr     = trial.suggest_float("dr", 0.0,  0.9)
-        hidden = trial.suggest_int("hidden", 6, 12)
+        if not self.arch == "resnet18":
+            hidden = trial.suggest_int("hidden", 6, 12)
+        else:
+            hidden = None
 
         # some verbose
         print('\nTrial number: {}'.format(trial.number))
@@ -92,7 +99,7 @@ class Objective(object):
                     rot_flip_in_mem=True, smoothing=self.smoothing, verbose=True)
 
         # define architecture
-        model = architecture.get_architecture(self.arch+'_err', hidden, dr, channels)
+        model = architecture.get_architecture(self.arch+'_err', hidden, dr, channels, pretrained=self.resnet_pretrained)
         if torch.cuda.device_count() > 1:
             print("Using %d GPUs"%(torch.cuda.device_count()))
             model = nn.DataParallel(model)
@@ -236,7 +243,8 @@ PROJECT_DIR = Path(fo.__file__).parents[1]
 print(f"PROJECT_DIR = {PROJECT_DIR}")
 
 # architecture parameters
-arch  = 'o3'
+# arch  = 'o3'
+arch  = 'resnet18'
 beta1 = 0.5
 beta2 = 0.999
 
@@ -270,6 +278,7 @@ rot_flip_in_mem = False  #whether rotations and flipings are kept in memory
 smoothing       = 2  #Gaussian smoothing in pixels units
 label           = 'all_steps_500_500_%s_smoothing_%d'%(arch,smoothing)
 #label           = 'all_steps_500_500_%s'%arch
+resnet_pretrained = True
 
 # training parameters
 batch_size  = 128
@@ -280,6 +289,18 @@ num_workers = 12    #number of workers to load data
 # optuna parameters
 study_name = 'wd_dr_hidden_lr_%s'%arch
 n_trials   = 50
+
+# dump all params
+d = dir()
+param_dump = {k: repr(v) for k, v in locals().items() if k in d and not k.startswith("__") and not isinstance(v, Type) and v is not Type and not isinstance(v, ModuleType)}
+
+param_dump_file = U.fname_storage(root_storage, fields, label, monopole=monopole).removeprefix("sqlite:///").removesuffix(".db") + ".json"
+print(f"Dumping run hparams to {param_dump_file}")
+Path(param_dump_file).parent.mkdir(parents=True, exist_ok=True)
+
+with open(param_dump_file, mode="w", encoding='utf-8') as fp:
+    json.dump(param_dump, fp, indent=4)
+
 ######################################################################################
 
 # use GPUs if available
@@ -299,7 +320,7 @@ storage_m = U.fname_storage(root_storage, fields, label, monopole=monopole)
 # train networks with bayesian optimization
 objective = Objective(device, seed, f_maps, f_params, batch_size, splits, f_maps_norm,
                       arch, min_lr, beta1, beta2, epochs, root_out, fields, monopole,
-                      label, num_workers, params, rot_flip_in_mem, sim, smoothing)
+                      label, num_workers, params, rot_flip_in_mem, sim, smoothing, resnet_pretrained)
 sampler = optuna.samplers.TPESampler(n_startup_trials=20)
 
 # create sqlite db if doesn't exist

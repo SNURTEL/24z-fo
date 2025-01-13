@@ -147,7 +147,8 @@ def get_results(study_name, storage, arch, channels, device, root_files, test_lo
 PROJECT_DIR = Path(fo.__file__).parents[1]
 print(f"PROJECT_DIR = {PROJECT_DIR}")
 # architecture parameters
-arch = 'o3'
+# arch  = 'o3'
+arch  = 'resnet18'
 
 # properties of the network/maps used for training
 sim_train       = 'IllustrisTNG'

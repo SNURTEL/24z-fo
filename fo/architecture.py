@@ -1,11 +1,15 @@
-import torch 
+import torch
 import torch.nn as nn
 import numpy as np
 import sys, os, time
 
+import torch.nn as nn
+import torchvision.models
+from torchvision.models import ResNet18_Weights
+
 
 # This function returns the architecture of the considered model
-def get_architecture(arch, hidden, dr, channels=1):
+def get_architecture(arch, hidden, dr, channels=1, pretrained=True):
 
     if   arch=='a':       return model_a(hidden)
     elif arch=='b':       return model_b(hidden)
@@ -30,16 +34,50 @@ def get_architecture(arch, hidden, dr, channels=1):
     elif arch=='m3_err':  return model_m3_err(hidden, dr, channels)
     elif arch=='n3_err':  return model_n3_err(hidden, dr, channels)
     elif arch=='o3_err':  return model_o3_err(hidden, dr, channels)
+    elif arch=='resnet18_err': return resnet_18(dr=dr, pretrained=pretrained)
     else:                 raise Exception('Architecture %s not found'%arch)
 
 #####################################################################################
 #####################################################################################
+class resnet_18(nn.Module):
+    def __init__(self, dr, pretrained: bool):
+        super(resnet_18, self).__init__()
+        self.ini_conv = nn.Conv2d(1, 3, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), bias=True)
+        if pretrained:
+            print("Using ResNet weights IMAGENET1K_V1")
+        else:
+            print("Initializing ResNet with random weights")
+        resnet = torchvision.models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
+        self.resnet = nn.Sequential(*(list(resnet.children())[:-1]))
+
+        self.fc1  = nn.Linear(512, 256)
+        self.fc2  = nn.Linear(256,  12)
+
+        self.dropout   = nn.Dropout(p=dr)
+        self.LeakyReLU = nn.LeakyReLU(0.2)
+
+    def forward(self, image):
+        x = self.ini_conv(image)
+        x = self.resnet(x)
+
+        x = x.view(image.shape[0],-1)
+        x = self.dropout(x)
+        x = self.dropout(self.LeakyReLU(self.fc1(x)))
+        x = self.fc2(x)
+
+        # enforce the errors to be positive
+        y = torch.clone(x)
+        y[:,6:12] = torch.square(x[:,6:12])
+
+        return y
+
+
 class model_a(nn.Module):
     def __init__(self, hidden):
         super(model_a, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: 2*hiddenx62x62
@@ -63,7 +101,7 @@ class model_a(nn.Module):
                             bias=True)
         self.B6 = nn.BatchNorm2d(100)
 
-        self.FC1  = nn.Linear(100*3*3, 6)  
+        self.FC1  = nn.Linear(100*3*3, 6)
 
         self.dropout   = nn.Dropout(p=0.5)
         self.ReLU      = nn.ReLU()
@@ -97,9 +135,9 @@ class model_a(nn.Module):
 class model_b(nn.Module):
     def __init__(self, hidden):
         super(model_b, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: hiddenx62x62
@@ -123,7 +161,7 @@ class model_b(nn.Module):
                             bias=True)
         self.B6 = nn.BatchNorm2d(100)
 
-        self.FC1  = nn.Linear(100*3*3, 6)  
+        self.FC1  = nn.Linear(100*3*3, 6)
 
         self.dropout   = nn.Dropout(p=0.5)
         self.ReLU      = nn.ReLU()
@@ -157,9 +195,9 @@ class model_b(nn.Module):
 class model_c(nn.Module):
     def __init__(self, hidden):
         super(model_c, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: hiddenx62x62
@@ -183,7 +221,7 @@ class model_c(nn.Module):
                             padding_mode='circular', bias=True)
         self.B6 = nn.BatchNorm2d(100)
 
-        self.FC1  = nn.Linear(100*3*3, 6)  
+        self.FC1  = nn.Linear(100*3*3, 6)
 
         self.dropout   = nn.Dropout(p=0.5)
         self.ReLU      = nn.ReLU()
@@ -217,9 +255,9 @@ class model_c(nn.Module):
 class model_d(nn.Module):
     def __init__(self, hidden):
         super(model_d, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: hiddenx62x62
@@ -243,7 +281,7 @@ class model_d(nn.Module):
                             padding_mode='circular', bias=True)
         self.B6 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=0.5)
         self.ReLU      = nn.ReLU()
@@ -277,9 +315,9 @@ class model_d(nn.Module):
 class model_e(nn.Module):
     def __init__(self, hidden, dr):
         super(model_e, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: hiddenx62x62
@@ -303,8 +341,8 @@ class model_e(nn.Module):
                             padding_mode='circular', bias=True)
         self.B6 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -339,15 +377,15 @@ class model_e(nn.Module):
 class model_e2(nn.Module):
     def __init__(self, hidden, dr):
         super(model_e2, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C2 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C2 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         self.B2 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C3 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -355,7 +393,7 @@ class model_e2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B3 = nn.BatchNorm2d(2*hidden)
         self.B4 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C5 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -363,7 +401,7 @@ class model_e2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B5 = nn.BatchNorm2d(4*hidden)
         self.B6 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C7 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -371,7 +409,7 @@ class model_e2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B7 = nn.BatchNorm2d(8*hidden)
         self.B8 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C9  = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -379,7 +417,7 @@ class model_e2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B9  = nn.BatchNorm2d(16*hidden)
         self.B10 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C11 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -388,8 +426,8 @@ class model_e2(nn.Module):
         self.B11 = nn.BatchNorm2d(32*hidden)
         self.B12 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -430,18 +468,18 @@ class model_e2(nn.Module):
 class model_e3(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_e3, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -452,7 +490,7 @@ class model_e3(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -463,7 +501,7 @@ class model_e3(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -474,7 +512,7 @@ class model_e3(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -485,7 +523,7 @@ class model_e3(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -497,8 +535,8 @@ class model_e3(nn.Module):
         self.B52 = nn.BatchNorm2d(32*hidden)
         self.B53 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -545,18 +583,18 @@ class model_e3(nn.Module):
 class model_e3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_e3_err, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -567,7 +605,7 @@ class model_e3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -578,7 +616,7 @@ class model_e3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -589,7 +627,7 @@ class model_e3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -600,7 +638,7 @@ class model_e3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -612,8 +650,8 @@ class model_e3_err(nn.Module):
         self.B52 = nn.BatchNorm2d(32*hidden)
         self.B53 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 12)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -660,18 +698,18 @@ class model_e3_err(nn.Module):
 class model_e3_abs(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_e3_abs, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -682,7 +720,7 @@ class model_e3_abs(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -693,7 +731,7 @@ class model_e3_abs(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -704,7 +742,7 @@ class model_e3_abs(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -715,7 +753,7 @@ class model_e3_abs(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -727,8 +765,8 @@ class model_e3_abs(nn.Module):
         self.B52 = nn.BatchNorm2d(32*hidden)
         self.B53 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -775,20 +813,20 @@ class model_e3_abs(nn.Module):
 class model_e3_res(nn.Module):
     def __init__(self, hidden, dr):
         super(model_e3_res, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
 
         self.R02 = nn.MaxPool2d(kernel_size=4, stride=2, padding=1)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -801,7 +839,7 @@ class model_e3_res(nn.Module):
         self.B13 = nn.BatchNorm2d(2*hidden)
 
         self.R12 = nn.MaxPool2d(kernel_size=5, stride=2, padding=1)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -814,7 +852,7 @@ class model_e3_res(nn.Module):
         self.B23 = nn.BatchNorm2d(4*hidden)
 
         self.R22 = nn.MaxPool2d(kernel_size=4, stride=2, padding=1)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -827,7 +865,7 @@ class model_e3_res(nn.Module):
         self.B33 = nn.BatchNorm2d(8*hidden)
 
         self.R32 = nn.MaxPool2d(kernel_size=5, stride=2, padding=1)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -840,7 +878,7 @@ class model_e3_res(nn.Module):
         self.B43 = nn.BatchNorm2d(16*hidden)
 
         self.R42 = nn.MaxPool2d(kernel_size=5, stride=2, padding=1)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -852,8 +890,8 @@ class model_e3_res(nn.Module):
         self.B52 = nn.BatchNorm2d(32*hidden)
         self.B53 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -904,9 +942,9 @@ class model_e3_res(nn.Module):
 class model_f(nn.Module):
     def __init__(self, hidden, dr):
         super(model_f, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: hiddenx62x62
@@ -930,9 +968,9 @@ class model_f(nn.Module):
                             padding_mode='circular', bias=True)
         self.B6 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3, 2*hidden*3*3)  
-        self.FC3  = nn.Linear(2*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3, 2*hidden*3*3)
+        self.FC3  = nn.Linear(2*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -969,15 +1007,15 @@ class model_f(nn.Module):
 class model_f2(nn.Module):
     def __init__(self, hidden, dr):
         super(model_f2, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C2 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C2 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         self.B2 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C3 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -985,7 +1023,7 @@ class model_f2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B3 = nn.BatchNorm2d(2*hidden)
         self.B4 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C5 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -993,7 +1031,7 @@ class model_f2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B5 = nn.BatchNorm2d(4*hidden)
         self.B6 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C7 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1001,7 +1039,7 @@ class model_f2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B7 = nn.BatchNorm2d(8*hidden)
         self.B8 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C9  = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1009,7 +1047,7 @@ class model_f2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B9  = nn.BatchNorm2d(16*hidden)
         self.B10 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C11 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1018,9 +1056,9 @@ class model_f2(nn.Module):
         self.B11 = nn.BatchNorm2d(32*hidden)
         self.B12 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3,  2*hidden*3*3)  
-        self.FC3  = nn.Linear(2*hidden*3*3,  6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3,  2*hidden*3*3)
+        self.FC3  = nn.Linear(2*hidden*3*3,  6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1062,18 +1100,18 @@ class model_f2(nn.Module):
 class model_f3(nn.Module):
     def __init__(self, hidden, dr):
         super(model_f3, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1084,7 +1122,7 @@ class model_f3(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1095,7 +1133,7 @@ class model_f3(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1106,7 +1144,7 @@ class model_f3(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1117,7 +1155,7 @@ class model_f3(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1129,9 +1167,9 @@ class model_f3(nn.Module):
         self.B52 = nn.BatchNorm2d(32*hidden)
         self.B53 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)  
-        self.FC2  = nn.Linear(4*hidden*3*3,  2*hidden*3*3)  
-        self.FC3  = nn.Linear(2*hidden*3*3,  6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 4*hidden*3*3)
+        self.FC2  = nn.Linear(4*hidden*3*3,  2*hidden*3*3)
+        self.FC3  = nn.Linear(2*hidden*3*3,  6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1179,9 +1217,9 @@ class model_f3(nn.Module):
 class model_g(nn.Module):
     def __init__(self, hidden, dr):
         super(model_g, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         # input: hiddenx125x125 ----------> output: hiddenx62x62
@@ -1205,10 +1243,10 @@ class model_g(nn.Module):
                             padding_mode='circular', bias=True)
         self.B6 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 16*hidden*3*3)  
-        self.FC2  = nn.Linear(16*hidden*3*3, 8*hidden*3*3)  
-        self.FC3  = nn.Linear(8*hidden*3*3,  4*hidden*3*3)  
-        self.FC4  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 16*hidden*3*3)
+        self.FC2  = nn.Linear(16*hidden*3*3, 8*hidden*3*3)
+        self.FC3  = nn.Linear(8*hidden*3*3,  4*hidden*3*3)
+        self.FC4  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1247,13 +1285,13 @@ class model_g2(nn.Module):
         super(model_g2, self).__init__()
 
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C1 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1, 
+        self.C1 = nn.Conv2d(1,         hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C2 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C2 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B1 = nn.BatchNorm2d(hidden)
         self.B2 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C3 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1261,7 +1299,7 @@ class model_g2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B3 = nn.BatchNorm2d(2*hidden)
         self.B4 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C5 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1269,7 +1307,7 @@ class model_g2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B5 = nn.BatchNorm2d(4*hidden)
         self.B6 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C7 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1277,7 +1315,7 @@ class model_g2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B7 = nn.BatchNorm2d(8*hidden)
         self.B8 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C9  = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1285,7 +1323,7 @@ class model_g2(nn.Module):
                             padding_mode='circular', bias=True)
         self.B9  = nn.BatchNorm2d(16*hidden)
         self.B10 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C11 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1294,10 +1332,10 @@ class model_g2(nn.Module):
         self.B11 = nn.BatchNorm2d(32*hidden)
         self.B12 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 16*hidden*3*3)  
-        self.FC2  = nn.Linear(16*hidden*3*3, 8*hidden*3*3)  
-        self.FC3  = nn.Linear(8*hidden*3*3,  4*hidden*3*3)  
-        self.FC4  = nn.Linear(4*hidden*3*3, 6)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 16*hidden*3*3)
+        self.FC2  = nn.Linear(16*hidden*3*3, 8*hidden*3*3)
+        self.FC3  = nn.Linear(8*hidden*3*3,  4*hidden*3*3)
+        self.FC4  = nn.Linear(4*hidden*3*3, 6)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1340,18 +1378,18 @@ class model_g2(nn.Module):
 class model_h3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_h3_err, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1362,7 +1400,7 @@ class model_h3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1373,7 +1411,7 @@ class model_h3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1384,7 +1422,7 @@ class model_h3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1395,7 +1433,7 @@ class model_h3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1407,10 +1445,10 @@ class model_h3_err(nn.Module):
         self.B52 = nn.BatchNorm2d(32*hidden)
         self.B53 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 16*hidden*3*3)  
-        self.FC2  = nn.Linear(16*hidden*3*3,  8*hidden*3*3)  
-        self.FC3  = nn.Linear(8*hidden*3*3,   4*hidden*3*3)  
-        self.FC4  = nn.Linear(4*hidden*3*3,  12)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 16*hidden*3*3)
+        self.FC2  = nn.Linear(16*hidden*3*3,  8*hidden*3*3)
+        self.FC3  = nn.Linear(8*hidden*3*3,   4*hidden*3*3)
+        self.FC4  = nn.Linear(4*hidden*3*3,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1459,18 +1497,18 @@ class model_h3_err(nn.Module):
 class model_i3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_i3_err, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1481,7 +1519,7 @@ class model_i3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: hiddenx62x62 --------> output: 2*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1492,7 +1530,7 @@ class model_i3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 2*hiddenx31x31 ----------> output: 2*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1503,7 +1541,7 @@ class model_i3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 2*hiddenx15x15 ----------> output: 4*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1514,7 +1552,7 @@ class model_i3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 4*hiddenx7x7 ----------> output: 100x3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1525,8 +1563,8 @@ class model_i3_err(nn.Module):
         self.B51 = nn.BatchNorm2d(32*hidden)
         self.B52 = nn.BatchNorm2d(32*hidden)
 
-        self.FC1  = nn.Linear(32*hidden*3*3, 8*hidden*3*3)  
-        self.FC2  = nn.Linear(8*hidden*3*3,  12)  
+        self.FC1  = nn.Linear(32*hidden*3*3, 8*hidden*3*3)
+        self.FC2  = nn.Linear(8*hidden*3*3,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1573,18 +1611,18 @@ class model_i3_err(nn.Module):
 class model_j3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_j3_err, self).__init__()
-        
+
         # input: 1x250x250 ---------------> output: hiddenx125x125
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=4, stride=2, padding=1,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx125x125 ----------> output: 2*hiddenx62x62
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1595,7 +1633,7 @@ class model_j3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: 2*hiddenx62x62 --------> output: 4*hiddenx31x31
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1606,7 +1644,7 @@ class model_j3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 4*hiddenx31x31 ----------> output: 8*hiddenx15x15
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1617,7 +1655,7 @@ class model_j3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 8*hiddenx15x15 ----------> output: 16*hiddenx7x7
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1628,7 +1666,7 @@ class model_j3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 16*hiddenx7x7 ----------> output: 32*hiddenx3x3
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1651,8 +1689,8 @@ class model_j3_err(nn.Module):
         self.B62 = nn.BatchNorm2d(64*hidden)
         self.B63 = nn.BatchNorm2d(64*hidden)
 
-        self.FC1  = nn.Linear(64*hidden*1*1,  64*hidden*1*1)  
-        self.FC2  = nn.Linear(64*hidden*1*1,  12)  
+        self.FC1  = nn.Linear(64*hidden*1*1,  64*hidden*1*1)
+        self.FC2  = nn.Linear(64*hidden*1*1,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1702,22 +1740,22 @@ class model_j3_err(nn.Module):
 class model_k3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_k3_err, self).__init__()
-        
+
         # input: 1x256x256 ---------------> output: hiddenx128x128
-        self.C00 = nn.Conv2d(channels,  hidden, kernel_size=1, stride=1, padding=0, 
+        self.C00 = nn.Conv2d(channels,  hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=2, stride=2, padding=0, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=2, stride=2, padding=0,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx128x128 ----------> output: 2*hiddenx64x64
-        self.C10 = nn.Conv2d(hidden,   2*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C10 = nn.Conv2d(hidden,   2*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1728,9 +1766,9 @@ class model_k3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: 2*hiddenx64x64 --------> output: 4*hiddenx32x32
-        self.C20 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C20 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1741,9 +1779,9 @@ class model_k3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 4*hiddenx32x32 ----------> output: 8*hiddenx16x16
-        self.C30 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C30 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1754,9 +1792,9 @@ class model_k3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 8*hiddenx16x16 ----------> output: 16*hiddenx8x8
-        self.C40 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C40 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1767,9 +1805,9 @@ class model_k3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 16*hiddenx8x8 ----------> output: 32*hiddenx4x4
-        self.C50 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C50 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1782,7 +1820,7 @@ class model_k3_err(nn.Module):
         self.B53 = nn.BatchNorm2d(32*hidden)
 
         # input: 32*hiddenx4x4 ----------> output: 64*hiddenx1x1
-        self.C60 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C60 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C61 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1797,8 +1835,8 @@ class model_k3_err(nn.Module):
         self.P0  = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
         self.P1  = nn.AvgPool2d(kernel_size=4, stride=1, padding=0)
 
-        self.FC1  = nn.Linear(64*hidden,  64*hidden)  
-        self.FC2  = nn.Linear(64*hidden,  12)  
+        self.FC1  = nn.Linear(64*hidden,  64*hidden)
+        self.FC2  = nn.Linear(64*hidden,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -1868,22 +1906,22 @@ class model_k3_err(nn.Module):
 class model_l3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_l3_err, self).__init__()
-        
+
         # input: 1x256x256 ---------------> output: hiddenx128x128
-        self.C00 = nn.Conv2d(channels,  hidden, kernel_size=1, stride=1, padding=0, 
+        self.C00 = nn.Conv2d(channels,  hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
-        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(hidden,    hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=2, stride=2, padding=0, 
+        self.C03 = nn.Conv2d(hidden,    hidden, kernel_size=2, stride=2, padding=0,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(hidden)
         self.B02 = nn.BatchNorm2d(hidden)
         self.B03 = nn.BatchNorm2d(hidden)
-        
+
         # input: hiddenx128x128 ----------> output: 2*hiddenx64x64
-        self.C10 = nn.Conv2d(hidden,   2*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C10 = nn.Conv2d(hidden,   2*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C11 = nn.Conv2d(hidden,   2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1894,9 +1932,9 @@ class model_l3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(2*hidden)
         self.B12 = nn.BatchNorm2d(2*hidden)
         self.B13 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: 2*hiddenx64x64 --------> output: 4*hiddenx32x32
-        self.C20 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C20 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C21 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1907,9 +1945,9 @@ class model_l3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(4*hidden)
         self.B22 = nn.BatchNorm2d(4*hidden)
         self.B23 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 4*hiddenx32x32 ----------> output: 8*hiddenx16x16
-        self.C30 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C30 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C31 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1920,9 +1958,9 @@ class model_l3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(8*hidden)
         self.B32 = nn.BatchNorm2d(8*hidden)
         self.B33 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 8*hiddenx16x16 ----------> output: 16*hiddenx8x8
-        self.C40 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C40 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C41 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1933,9 +1971,9 @@ class model_l3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(16*hidden)
         self.B42 = nn.BatchNorm2d(16*hidden)
         self.B43 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 16*hiddenx8x8 ----------> output: 32*hiddenx4x4
-        self.C50 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C50 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C51 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -1953,8 +1991,8 @@ class model_l3_err(nn.Module):
 
         self.P0  = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
-        self.FC1  = nn.Linear(150*hidden, 75*hidden)  
-        self.FC2  = nn.Linear(75*hidden,  12)  
+        self.FC1  = nn.Linear(150*hidden, 75*hidden)
+        self.FC2  = nn.Linear(75*hidden,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -2021,22 +2059,22 @@ class model_l3_err(nn.Module):
 class model_m3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_m3_err, self).__init__()
-        
+
         # input: 1x256x256 ---------------> output: 2*hiddenx128x128
-        self.C00 = nn.Conv2d(channels,  2*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C00 = nn.Conv2d(channels,  2*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
-        self.C01 = nn.Conv2d(channels,  2*hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=2, stride=2, padding=0, 
+        self.C03 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=2, stride=2, padding=0,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(2*hidden)
         self.B02 = nn.BatchNorm2d(2*hidden)
         self.B03 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: 2*hiddenx128x128 ----------> output: 4*hiddenx64x64
-        self.C10 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C10 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C11 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2047,9 +2085,9 @@ class model_m3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(4*hidden)
         self.B12 = nn.BatchNorm2d(4*hidden)
         self.B13 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 4*hiddenx64x64 --------> output: 8*hiddenx32x32
-        self.C20 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C20 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C21 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2060,9 +2098,9 @@ class model_m3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(8*hidden)
         self.B22 = nn.BatchNorm2d(8*hidden)
         self.B23 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 8*hiddenx32x32 ----------> output: 16*hiddenx16x16
-        self.C30 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C30 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C31 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2073,9 +2111,9 @@ class model_m3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(16*hidden)
         self.B32 = nn.BatchNorm2d(16*hidden)
         self.B33 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 16*hiddenx16x16 ----------> output: 32*hiddenx8x8
-        self.C40 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C40 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C41 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2086,9 +2124,9 @@ class model_m3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(32*hidden)
         self.B42 = nn.BatchNorm2d(32*hidden)
         self.B43 = nn.BatchNorm2d(32*hidden)
-        
+
         # input: 32*hiddenx8x8 ----------> output:64*hiddenx4x4
-        self.C50 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C50 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C51 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2107,8 +2145,8 @@ class model_m3_err(nn.Module):
 
         self.P0  = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
-        self.FC1  = nn.Linear(128*hidden, 64*hidden)  
-        self.FC2  = nn.Linear(64*hidden,  12)  
+        self.FC1  = nn.Linear(128*hidden, 64*hidden)
+        self.FC2  = nn.Linear(64*hidden,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -2176,22 +2214,22 @@ class model_m3_err(nn.Module):
 class model_n3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_n3_err, self).__init__()
-        
+
         # input: 1x256x256 ---------------> output: 2*hiddenx128x128
-        self.C00 = nn.Conv2d(channels,  2*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C00 = nn.Conv2d(channels,  2*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
-        self.C01 = nn.Conv2d(channels,  2*hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=2, stride=2, padding=0, 
+        self.C03 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=2, stride=2, padding=0,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(2*hidden)
         self.B02 = nn.BatchNorm2d(2*hidden)
         self.B03 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: 2*hiddenx128x128 ----------> output: 4*hiddenx64x64
-        self.C10 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C10 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C11 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2202,9 +2240,9 @@ class model_n3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(4*hidden)
         self.B12 = nn.BatchNorm2d(4*hidden)
         self.B13 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 4*hiddenx64x64 --------> output: 8*hiddenx32x32
-        self.C20 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C20 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C21 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2215,9 +2253,9 @@ class model_n3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(8*hidden)
         self.B22 = nn.BatchNorm2d(8*hidden)
         self.B23 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 8*hiddenx32x32 ----------> output: 16*hiddenx16x16
-        self.C30 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C30 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C31 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2228,9 +2266,9 @@ class model_n3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(16*hidden)
         self.B32 = nn.BatchNorm2d(16*hidden)
         self.B33 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 16*hiddenx16x16 ----------> output: 32*hiddenx8x8
-        self.C40 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C40 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C41 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2241,9 +2279,9 @@ class model_n3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(32*hidden)
         self.B42 = nn.BatchNorm2d(32*hidden)
         self.B43 = nn.BatchNorm2d(32*hidden)
-        
+
         # input: 32*hiddenx8x8 ----------> output:64*hiddenx4x4
-        self.C50 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=1, stride=1, padding=0, 
+        self.C50 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=1, stride=1, padding=0,
                              padding_mode='circular', bias=True)
         self.C51 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2262,8 +2300,8 @@ class model_n3_err(nn.Module):
 
         self.P0  = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
-        self.FC1  = nn.Linear(128*hidden, 128*hidden)  
-        self.FC2  = nn.Linear(128*hidden,  12)  
+        self.FC1  = nn.Linear(128*hidden, 128*hidden)
+        self.FC2  = nn.Linear(128*hidden,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()
@@ -2330,18 +2368,18 @@ class model_n3_err(nn.Module):
 class model_o3_err(nn.Module):
     def __init__(self, hidden, dr, channels):
         super(model_o3_err, self).__init__()
-        
+
         # input: 1x256x256 ---------------> output: 2*hiddenx128x128
-        self.C01 = nn.Conv2d(channels,  2*hidden, kernel_size=3, stride=1, padding=1, 
+        self.C01 = nn.Conv2d(channels,  2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C02 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=3, stride=1, padding=1, 
+        self.C02 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
-        self.C03 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=2, stride=2, padding=0, 
+        self.C03 = nn.Conv2d(2*hidden,  2*hidden, kernel_size=2, stride=2, padding=0,
                             padding_mode='circular', bias=True)
         self.B01 = nn.BatchNorm2d(2*hidden)
         self.B02 = nn.BatchNorm2d(2*hidden)
         self.B03 = nn.BatchNorm2d(2*hidden)
-        
+
         # input: 2*hiddenx128x128 ----------> output: 4*hiddenx64x64
         self.C11 = nn.Conv2d(2*hidden, 4*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2352,7 +2390,7 @@ class model_o3_err(nn.Module):
         self.B11 = nn.BatchNorm2d(4*hidden)
         self.B12 = nn.BatchNorm2d(4*hidden)
         self.B13 = nn.BatchNorm2d(4*hidden)
-        
+
         # input: 4*hiddenx64x64 --------> output: 8*hiddenx32x32
         self.C21 = nn.Conv2d(4*hidden, 8*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2363,7 +2401,7 @@ class model_o3_err(nn.Module):
         self.B21 = nn.BatchNorm2d(8*hidden)
         self.B22 = nn.BatchNorm2d(8*hidden)
         self.B23 = nn.BatchNorm2d(8*hidden)
-        
+
         # input: 8*hiddenx32x32 ----------> output: 16*hiddenx16x16
         self.C31 = nn.Conv2d(8*hidden,  16*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2374,7 +2412,7 @@ class model_o3_err(nn.Module):
         self.B31 = nn.BatchNorm2d(16*hidden)
         self.B32 = nn.BatchNorm2d(16*hidden)
         self.B33 = nn.BatchNorm2d(16*hidden)
-        
+
         # input: 16*hiddenx16x16 ----------> output: 32*hiddenx8x8
         self.C41 = nn.Conv2d(16*hidden, 32*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2385,7 +2423,7 @@ class model_o3_err(nn.Module):
         self.B41 = nn.BatchNorm2d(32*hidden)
         self.B42 = nn.BatchNorm2d(32*hidden)
         self.B43 = nn.BatchNorm2d(32*hidden)
-        
+
         # input: 32*hiddenx8x8 ----------> output:64*hiddenx4x4
         self.C51 = nn.Conv2d(32*hidden, 64*hidden, kernel_size=3, stride=1, padding=1,
                             padding_mode='circular', bias=True)
@@ -2404,8 +2442,8 @@ class model_o3_err(nn.Module):
 
         self.P0  = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
-        self.FC1  = nn.Linear(128*hidden, 64*hidden)  
-        self.FC2  = nn.Linear(64*hidden,  12)  
+        self.FC1  = nn.Linear(128*hidden, 64*hidden)
+        self.FC2  = nn.Linear(64*hidden,  12)
 
         self.dropout   = nn.Dropout(p=dr)
         self.ReLU      = nn.ReLU()

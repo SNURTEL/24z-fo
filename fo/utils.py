@@ -4,7 +4,7 @@ import sys, os, time, optuna
 
 # This routine reads a database and returns the value of the best-trial
 def best_params_database(study_name, storage):
-    
+
     # load the optuna study
     study = optuna.load_study(study_name=study_name, storage=storage)
 
@@ -24,9 +24,9 @@ def best_params_database(study_name, storage):
         print(" Params: ")
         for key, value in trial.params.items():
             print("    {}: {}".format(key, value))
-        num    = trial.number 
+        num    = trial.number
         dr     = trial.params['dr']
-        hidden = trial.params['hidden']
+        hidden = trial.params.get('hidden')
         lr     = trial.params['lr']
         wd     = trial.params['wd']
 
@@ -34,7 +34,7 @@ def best_params_database(study_name, storage):
 
 
 # This routine returns the name of the file with the best-model and its parameters
-def best_model_params(study_name, storage, fields, root, label, errors=False, 
+def best_model_params(study_name, storage, fields, root, label, errors=False,
                       sim='IllustrisTNG', monopole=True):
 
     # get the value of the parameters of the best-model
@@ -112,7 +112,7 @@ def fname_maps(root, fields, sim, z, suite='LH', sim_norm=None):
 
 # This routine returns the name of the storage databases
 def fname_storage(root, fields, label_m, label_e=None, monopole=True):
-    
+
     # do a loop over the different fields
     storage = '%s'%root
     for field in fields:
@@ -120,10 +120,10 @@ def fname_storage(root, fields, label_m, label_e=None, monopole=True):
     if monopole is False:  storage = '%s_no_monopole'%storage
 
     # add the labels
-    if label_m is None:  
+    if label_m is None:
         storage_m = '%s.db'%storage
         storage_e = '%s_errors.db'%storage
-    else:  
+    else:
         storage_m = '%s_%s.db'%(storage, label_m)
         storage_e = '%s_%s_errors.db'%(storage, label_e)
 
