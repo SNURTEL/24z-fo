@@ -22,11 +22,15 @@ Then:
 ```shell
 pdm run train
 ```
-This will start the hyperparam tuning proces using optuna. Checkpointed models will be written to `outputs/models_<SIM>/`.
+This will start the hyperparam tuning proces using Optuna. Checkpointed models will be written to `outputs/models_<SIM>/`.
 
 ### Testing
 
-:sparkles: Coming soon :sparkles:
+Ensure params in `INPUT` section of `fo/scripts/test.py` match the train params. Then:
+
+```shell
+pdm run test
+```
 
 ### Troubleshooting
 

@@ -1,10 +1,13 @@
+from typing import OrderedDict
 import numpy as np
 import sys, os, time
+from pathlib import Path
 import torch
 import torch.nn as nn
 import fo.data as data
 import fo.architecture as architecture
 import optuna
+import fo
 import fo.utils as U
 
 def get_results(study_name, storage, arch, channels, device, root_files, test_loader,
@@ -28,7 +31,17 @@ def get_results(study_name, storage, arch, channels, device, root_files, test_lo
     # load best-model, if it exists
     if os.path.exists(fmodel):
         print('Loading model...')
-        model.load_state_dict(torch.load(fmodel, map_location=torch.device(device)))
+
+        # fix models trained without DataParallel
+        state_dict = torch.load(fmodel, map_location=torch.device(device))
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            if not k.startswith("module."):
+                new_state_dict[f"module.{k}"] = v
+            else:
+                new_state_dict[k] = v
+
+        model.load_state_dict(new_state_dict)
     else:
         raise Exception('model doesnt exists!!!')
     ################################
@@ -39,8 +52,10 @@ def get_results(study_name, storage, arch, channels, device, root_files, test_lo
     suffix2 = 'test_%s%s_%s'%(sim_test, suffix_test, label_test)
     if not(monopole_test):   suffix2 = '%s_no_monopole'%suffix2
     suffix = '%s_%s_%s.txt'%(suffix1, suffix2, suite)
-    fresults  = 'results/results_%s'%suffix
-    fresults1 = 'results/Normalized_errors_%s'%suffix
+    fresults  = Path(root_files) / f'results/results_{suffix}'
+    fresults.parent.mkdir(parents=True, exist_ok=True)
+    fresults1 = Path(root_files) / f'results/Normalized_errors_{suffix}'
+    fresults1.parent.mkdir(parents=True, exist_ok=True)
 
     # get the number of maps in the test set
     num_maps = U.dataloader_elements(test_loader)
@@ -129,6 +144,8 @@ def get_results(study_name, storage, arch, channels, device, root_files, test_lo
 
 
 ##################################### INPUT ##########################################
+PROJECT_DIR = Path(fo.__file__).parents[1]
+print(f"PROJECT_DIR = {PROJECT_DIR}")
 # architecture parameters
 arch = 'o3'
 
@@ -138,25 +155,27 @@ fields_train    = ['T']
 #['Mgas','Mcdm','Mtot','Mstar','Vgas','Vcdm',
                   # 'HI', 'ne', 'P', 'T']
 monopole_train  = True
-smoothing_train = 0
+smoothing_train = 2
 label_train     = 'all_steps_500_500_%s'%arch
 
 # properties of the maps for testing
-sim_test       = 'SIMBA'
+sim_test       = 'IllustrisTNG'
 fields_test    = ['T']
 #['Mgas','Mcdm','Mtot','Mstar','Vgas','Vcdm',
 #                  'HI', 'ne', 'P', 'T']
 monopole_test  = True
-smoothing_test = 0
+smoothing_test = 2
 label_test     = 'all_steps_500_500_%s'%arch
 suite          = 'LH' #'LH' or 'CV'
 mode           = 'test'
 
 # other parameters (usually no need to modify)
-root_files    = '/mnt/ceph/users/camels/Results/multifield_2_params'
-root_maps     = '/mnt/ceph/users/camels/Results/images_new' #folder containing the maps
+root_files    = PROJECT_DIR / "outputs"
+root_maps     = PROJECT_DIR / f'data/{sim_test}' #folder containing the maps
 batch_size    = 32
-root_storage  = 'sqlite:///databases_%s/%s'%(sim_train,arch)
+_root_storage_path = PROJECT_DIR / f'optuna/databases_{sim_test}'
+root_storage_path = _root_storage_path / f"{arch}"
+root_storage    = f"sqlite:///{root_storage_path}"
 study_name    = 'wd_dr_hidden_lr_%s'%arch
 z             = 0.00  #redshift
 seed          = 1               #random seed to initially mix the maps
@@ -186,9 +205,9 @@ criterion = nn.MSELoss()
 
 # get the test mode and the file with the parameters
 if suite=='LH':
-    f_params = '/mnt/ceph/users/camels/Software/%s/latin_hypercube_params.txt'%sim_test
+    f_params        = PROJECT_DIR / f'data/{sim_test}/params_LH_{sim_test}.txt'
 elif suite=='CV':
-    f_params = '/mnt/ceph/users/camels/Software/%s/CV_params.txt'%sim_test
+    f_params        = PROJECT_DIR / f'data/{sim_test}/params_CV_{sim_test}.txt'
 else:          raise Exception('wrong suite value')
 
 # do a loop over the different fields

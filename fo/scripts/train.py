@@ -246,6 +246,7 @@ sim = 'IllustrisTNG'
 # data parameters
 root_out        = PROJECT_DIR / "outputs" #output folder
 root_out.mkdir(parents=True, exist_ok=True)
+root_out.mkdir(parents=True, exist_ok=True)
 (root_out / f"models_{sim}").mkdir(parents=True, exist_ok=True)
 (root_out / f"losses_{sim}").mkdir(parents=True, exist_ok=True)
 root_maps       = PROJECT_DIR / f'data/{sim}' #folder with the maps
@@ -274,7 +275,7 @@ label           = 'all_steps_500_500_%s_smoothing_%d'%(arch,smoothing)
 batch_size  = 128
 min_lr      = 1e-9
 epochs      = 200
-num_workers = 20    #number of workers to load data
+num_workers = 12    #number of workers to load data
 
 # optuna parameters
 study_name = 'wd_dr_hidden_lr_%s'%arch
