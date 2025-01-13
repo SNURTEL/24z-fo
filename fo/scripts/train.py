@@ -1,11 +1,14 @@
 import numpy as np
 import sys, os, time
+import sqlite3
+from pathlib import Path
 import torch
 import torch.nn as nn
 import fo.data as data
 import fo.architecture as architecture
 import torch.backends.cudnn as cudnn
 import optuna
+import fo
 import fo.utils as U
 
 
@@ -229,6 +232,9 @@ class Objective(object):
 
 
 ##################################### INPUT ##########################################
+PROJECT_DIR = Path(fo.__file__).parents[1]
+print(f"PROJECT_DIR = {PROJECT_DIR}")
+
 # architecture parameters
 arch  = 'o3'
 beta1 = 0.5
@@ -238,20 +244,28 @@ beta2 = 0.999
 sim = 'IllustrisTNG'
 
 # data parameters
-root_out        = '/mnt/ceph/users/camels/Results/multifield_2_params' #output folder
-root_maps       = '/mnt/ceph/users/camels/Results/images_new' #folder with the maps
-root_storage    = 'sqlite:///databases_%s/%s'%(sim,arch)
-f_params        = '/mnt/ceph/users/camels/Software/%s/latin_hypercube_params.txt'%sim
+root_out        = PROJECT_DIR / "outputs" #output folder
+root_out.mkdir(parents=True, exist_ok=True)
+(root_out / f"models_{sim}").mkdir(parents=True, exist_ok=True)
+(root_out / f"losses_{sim}").mkdir(parents=True, exist_ok=True)
+root_maps       = PROJECT_DIR / f'data/{sim}' #folder with the maps
+root_maps.mkdir(parents=True, exist_ok=True)
+_root_storage_path = PROJECT_DIR / f'optuna/databases_{sim}'
+_root_storage_path.parent.mkdir(parents=True, exist_ok=True)
+# {arch} is the file prefix, not directory
+root_storage_path = _root_storage_path / f"{arch}"
+root_storage    = f"sqlite:///{root_storage_path}"
+f_params        = PROJECT_DIR / f'data/{sim}/params_LH_{sim}.txt'
 seed            = 1               #random seed to initially mix the maps
 splits          = 15              #number of maps per simulation
 z               = 0.00            #redshift
 monopole        = True  #keep the monopole of the maps (True) or remove it (False)
-fields          = ['Nbody']  #repeat Mgas, HI, ne, MgFe
-params          = [0,1] #0(Om) 1(s8) 2(A_SN1) 3 (A_AGN1) 4(A_SN2) 5(A_AGN2)
+fields          = ['T']  #repeat Mgas, HI, ne, MgFe
+params          = [0,1, 2, 3, 4, 5] #0(Om) 1(s8) 2(A_SN1) 3 (A_AGN1) 4(A_SN2) 5(A_AGN2)
 #fields          = ['Mgas', 'Mtot', 'Mstar', 'Vgas', 'T', 'Z',
 #                   'P', 'HI', 'ne', 'B', 'MgFe']  #fields considered
 #params          = [0,1,2,3,4,5] #0(Om) 1(s8) 2(A_SN1) 3 (A_AGN1) 4(A_SN2) 5(A_AGN2)
-rot_flip_in_mem = True  #whether rotations and flipings are kept in memory
+rot_flip_in_mem = False  #whether rotations and flipings are kept in memory
 smoothing       = 2  #Gaussian smoothing in pixels units
 label           = 'all_steps_500_500_%s_smoothing_%d'%(arch,smoothing)
 #label           = 'all_steps_500_500_%s'%arch
@@ -286,6 +300,14 @@ objective = Objective(device, seed, f_maps, f_params, batch_size, splits, f_maps
                       arch, min_lr, beta1, beta2, epochs, root_out, fields, monopole,
                       label, num_workers, params, rot_flip_in_mem, sim, smoothing)
 sampler = optuna.samplers.TPESampler(n_startup_trials=20)
+
+# create sqlite db if doesn't exist
+if storage_m.startswith("sqlite://"):
+    db_path = Path(storage_m.removeprefix("sqlite:///"))
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.close()
+
 study = optuna.create_study(study_name=study_name, sampler=sampler, storage=storage_m,
                             load_if_exists=True)
 study.optimize(objective, n_trials, gc_after_trial=False)

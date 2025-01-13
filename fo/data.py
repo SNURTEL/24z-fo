@@ -1,17 +1,17 @@
-import torch 
+import torch
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 import numpy as np
 import sys, os, time, optuna
 import torchvision.utils as vutils
-import utils as U
-import architecture
+import fo.utils as U
+import fo.architecture as architecture
 import scipy.ndimage
 
 
 # This routine takes set of maps and smooth them with a Gaussian kernel
 def smooth_maps(maps, smoothing, verbose=True):
-    
+
     if verbose:  print('Smoothing images with smoothing length: %d'%smoothing)
 
     # do a loop over all maps
@@ -40,8 +40,8 @@ def remove_monopole(maps, verbose=True):
 # posterior mean prediction from the best-model to estimate error bars
 class make_dataset_multifield2_errors():
 
-    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm, 
-                 study_name, storage_m, fields, root_files, label_m, 
+    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm,
+                 study_name, storage_m, fields, root_files, label_m,
                  arch, device, verbose):
 
         # get the number of channels in the images
@@ -49,7 +49,7 @@ class make_dataset_multifield2_errors():
 
         ####### Best model mean ########
         # get the parameters of the best model for the mean
-        fmodel_m, num, dr, hidden, lr, wd = U.best_model_params(study_name, storage_m, 
+        fmodel_m, num, dr, hidden, lr, wd = U.best_model_params(study_name, storage_m,
                                                     fields, root_files, label_m)
 
         # get the model
@@ -59,12 +59,12 @@ class make_dataset_multifield2_errors():
         print('total number of parameters in the model = %d'%network_total_params)
 
         # load best-model, if it exists
-        if os.path.exists(fmodel_m):  
+        if os.path.exists(fmodel_m):
             print('Loading model...')
-            model_m.load_state_dict(torch.load(fmodel_m, 
+            model_m.load_state_dict(torch.load(fmodel_m,
                                                map_location=torch.device(device)))
         else:  raise Exception('model doesnt exists!!!')
-        ################################   
+        ################################
 
         # get the total number of sims and maps
         params_sims = np.loadtxt(f_params) #simulations parameters, NOT maps parameters
@@ -84,18 +84,18 @@ class make_dataset_multifield2_errors():
         error    = np.zeros((total_maps,num_params), dtype=np.float32)
 
         # get the size and offset depending on the type of dataset
-        if   mode=='train':  
+        if   mode=='train':
             offset, size_sims = int(0.00*total_sims), int(0.90*total_sims)
-        elif mode=='valid':  
+        elif mode=='valid':
             offset, size_sims = int(0.90*total_sims), int(0.05*total_sims)
-        elif mode=='test':  
+        elif mode=='test':
             offset, size_sims = int(0.95*total_sims), int(0.05*total_sims)
-        elif mode=='all':  
+        elif mode=='all':
             offset, size_sims = int(0.00*total_sims), int(1.00*total_sims)
         else:    raise Exception('Wrong name!')
         size_maps = size_sims*splits
 
-        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a 
+        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a
         # random permutation. E.g. 5 9 0 29...342
         np.random.seed(seed)
         sim_numbers = np.arange(total_sims) #shuffle maps not rotations
@@ -122,17 +122,17 @@ class make_dataset_multifield2_errors():
             # read maps in the considered channel
             data_c = np.load(fim)
             if data_c.shape[0]!=total_maps:  raise Exception('sizes do not match')
-            if verbose:  
+            if verbose:
                 print('%.3e < F(all|orig) < %.3e'%(np.min(data_c), np.max(data_c)))
 
             # rescale maps
             if fim.find('Mstar')!=-1:  data_c = np.log10(data_c + 1.0)
             else:                      data_c = np.log10(data_c)
-            if verbose:  
+            if verbose:
                 print('%.3f < F(all|resc)  < %.3f'%(np.min(data_c), np.max(data_c)))
 
             # normalize maps
-            if fnorm is None:  
+            if fnorm is None:
                 mean,    std     = np.mean(data_c), np.std(data_c)
                 minimum, maximum = np.min(data_c),  np.max(data_c)
             else:
@@ -144,13 +144,13 @@ class make_dataset_multifield2_errors():
                 del data_norm
             #data = 2*(data - minimum)/(maximum - minimum) - 1.0
             data_c = (data_c - mean)/std
-            if verbose:  
-                print('%.3f < F(all|norm) < %.3f'%(np.min(data_c), np.max(data_c))) 
+            if verbose:
+                print('%.3f < F(all|norm) < %.3f'%(np.min(data_c), np.max(data_c)))
 
             # keep only the data of the chosen set
             #data[:,channel,:,:] = data_c[indexes]
             data[:,channel,:,:] = data_c
-        
+
         # get the prediction of the posterior mean; use a batch of 64
         start = 0
         iterations = data.shape[0]//64
@@ -191,7 +191,7 @@ class make_dataset_multifield2_errors():
         # and whether do flipping or not
         rot  = np.random.randint(0,4)
         flip = np.random.randint(0,1)
-        
+
         # rotate and flip the maps
         maps = torch.rot90(self.x[idx], k=rot, dims=[1,2])
         if flip==1:  maps = torch.flip(maps, dims=[1])
@@ -200,10 +200,10 @@ class make_dataset_multifield2_errors():
 
 
 # This class creates the dataset. It will read the maps and store them in memory
-# the rotations and flipings are done when calling the data 
+# the rotations and flipings are done when calling the data
 class make_dataset_multifield2():
 
-    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm, 
+    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm,
                  monopole, monopole_norm, smoothing, smoothing_norm, verbose):
 
         # get the total number of sims and maps
@@ -221,18 +221,18 @@ class make_dataset_multifield2():
         params  = (params - minimum)/(maximum - minimum)
 
         # get the size and offset depending on the type of dataset
-        if   mode=='train':  
+        if   mode=='train':
             offset, size_sims = int(0.00*total_sims), int(0.90*total_sims)
-        elif mode=='valid':  
+        elif mode=='valid':
             offset, size_sims = int(0.90*total_sims), int(0.05*total_sims)
-        elif mode=='test':  
+        elif mode=='test':
             offset, size_sims = int(0.95*total_sims), int(0.05*total_sims)
-        elif mode=='all':  
+        elif mode=='all':
             offset, size_sims = int(0.00*total_sims), int(1.00*total_sims)
         else:    raise Exception('Wrong name!')
         size_maps = size_sims*splits
 
-        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a 
+        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a
         # random permutation. E.g. 5 9 0 29...342
         np.random.seed(seed)
         sim_numbers = np.arange(total_sims) #shuffle maps not rotations
@@ -263,7 +263,7 @@ class make_dataset_multifield2():
             # read maps in the considered channel
             data_c = np.load(fim)
             if data_c.shape[0]!=total_maps:  raise Exception('sizes do not match')
-            if verbose:  
+            if verbose:
                 print('%.3e < F(all|orig) < %.3e'%(np.min(data_c), np.max(data_c)))
 
             # smooth the images
@@ -272,14 +272,14 @@ class make_dataset_multifield2():
             # rescale maps
             if fim.find('Mstar')!=-1:  data_c = np.log10(data_c + 1.0)
             else:                      data_c = np.log10(data_c)
-            if verbose:  
+            if verbose:
                 print('%.3f < F(all|resc)  < %.3f'%(np.min(data_c), np.max(data_c)))
 
             # remove monopole of the images
             if monopole is False:  data_c = remove_monopole(data_c, verbose)
 
             # normalize maps
-            if fnorm is None:  
+            if fnorm is None:
                 mean,    std     = np.mean(data_c), np.std(data_c)
                 minimum, maximum = np.min(data_c),  np.max(data_c)
             else:
@@ -287,7 +287,7 @@ class make_dataset_multifield2():
                 data_norm     = np.load(fnorm)
 
                 # smooth data
-                if smoothing_norm>0:  
+                if smoothing_norm>0:
                     data_norm = smooth_maps(data_norm, smoothing_norm, verbose)
 
                 # rescale data
@@ -305,8 +305,8 @@ class make_dataset_multifield2():
 
             #data = 2*(data - minimum)/(maximum - minimum) - 1.0
             data_c = (data_c - mean)/std
-            if verbose:  
-                print('%.3f < F(all|norm) < %.3f'%(np.min(data_c), np.max(data_c))) 
+            if verbose:
+                print('%.3f < F(all|norm) < %.3f'%(np.min(data_c), np.max(data_c)))
 
             # keep only the data of the chosen set
             data[:,channel,:,:] = data_c[indexes]
@@ -314,7 +314,7 @@ class make_dataset_multifield2():
             #if verbose:
             #    print('Channel %d contains %d maps'%(channel,counted_maps))
             #    print('%.3f < F < %.3f\n'%(np.min(data_c), np.max(data_c)))
-        
+
         self.size = data.shape[0]
         self.x    = torch.tensor(data,   dtype=torch.float32)
         self.y    = torch.tensor(params, dtype=torch.float32)
@@ -331,7 +331,7 @@ class make_dataset_multifield2():
         # and whether do flipping or not
         rot  = np.random.randint(0,4)
         flip = np.random.randint(0,1)
-        
+
         # rotate and flip the maps
         maps = torch.rot90(self.x[idx], k=rot, dims=[1,2])
         if flip==1:  maps = torch.flip(maps, dims=[1])
@@ -342,8 +342,8 @@ class make_dataset_multifield2():
 # This class creates the dataset. Rotations and flippings are done and stored
 class make_dataset_multifield():
 
-    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm, 
-                 monopole, monopole_norm, just_monopole, smoothing, smoothing_norm, 
+    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm,
+                 monopole, monopole_norm, just_monopole, smoothing, smoothing_norm,
                  verbose):
 
         # get the total number of sims and maps
@@ -361,18 +361,18 @@ class make_dataset_multifield():
         params_maps = (params_maps - minimum)/(maximum - minimum)
 
         # get the size and offset depending on the type of dataset
-        if   mode=='train':  
+        if   mode=='train':
             offset, size_sims = int(0.00*total_sims), int(0.90*total_sims)
-        elif mode=='valid':  
+        elif mode=='valid':
             offset, size_sims = int(0.90*total_sims), int(0.05*total_sims)
-        elif mode=='test':  
+        elif mode=='test':
             offset, size_sims = int(0.95*total_sims), int(0.05*total_sims)
-        elif mode=='all':  
+        elif mode=='all':
             offset, size_sims = int(0.00*total_sims), int(1.00*total_sims)
         else:    raise Exception('Wrong name!')
         size_maps = size_sims*splits
 
-        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a 
+        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a
         # random permutation. E.g. 5 9 0 29...342
         np.random.seed(seed)
         sim_numbers = np.arange(total_sims) #shuffle sims not maps
@@ -404,7 +404,7 @@ class make_dataset_multifield():
             # read maps in the considered channel
             data_c = np.load(fim)
             if data_c.shape[0]!=total_maps:  raise Exception('sizes do not match')
-            if verbose:  
+            if verbose:
                 print('%.3e < F(all|orig) < %.3e'%(np.min(data_c), np.max(data_c)))
 
             # smooth the images
@@ -413,14 +413,14 @@ class make_dataset_multifield():
             # rescale maps
             if fim.find('Mstar')!=-1:  data_c = np.log10(data_c + 1.0)
             else:                      data_c = np.log10(data_c)
-            if verbose:  
+            if verbose:
                 print('%.3f < F(all|resc)  < %.3f'%(np.min(data_c), np.max(data_c)))
 
             # remove monopole of the images
             if monopole is False:  data_c = remove_monopole(data_c, verbose)
 
             # normalize maps
-            if fnorm is None:  
+            if fnorm is None:
                 mean,    std     = np.mean(data_c), np.std(data_c)
                 minimum, maximum = np.min(data_c),  np.max(data_c)
             else:
@@ -428,7 +428,7 @@ class make_dataset_multifield():
                 data_norm = np.load(fnorm)
 
                 # smooth maps
-                if smoothing_norm>0:  
+                if smoothing_norm>0:
                     data_norm = smooth_maps(data_norm, smoothing_norm, verbose)
 
                 # rescale
@@ -454,8 +454,8 @@ class make_dataset_multifield():
 
             #data = 2*(data - minimum)/(maximum - minimum) - 1.0
             data_c = (data_c - mean)/std
-            if verbose:  
-                print('%.3f < F(all|norm) < %.3f'%(np.min(data_c), np.max(data_c))) 
+            if verbose:
+                print('%.3f < F(all|norm) < %.3f'%(np.min(data_c), np.max(data_c)))
 
             # keep only the data of the chosen set
             data_c = data_c[indexes]
@@ -473,12 +473,12 @@ class make_dataset_multifield():
                                                     np.flip(data_rot, axis=1)
                 params[counted_maps:counted_maps+size_maps]           = params_maps
                 counted_maps += size_maps
-            
+
             if verbose:
                 print('Channel %d contains %d maps'%(channel,counted_maps))
                 print('%.3f < F < %.3f\n'%(np.min(data_c), np.max(data_c)))
-                
-        
+
+
         self.size = data.shape[0]
         self.x    = torch.tensor(data,   dtype=torch.float32)
         self.y    = torch.tensor(params, dtype=torch.float32)
@@ -503,10 +503,10 @@ class make_dataset_multifield():
 
 
 
-# This class creates the dataset 
+# This class creates the dataset
 class make_dataset():
 
-    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm, 
+    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm,
                  monopole, verbose):
 
         # read the data
@@ -534,7 +534,7 @@ class make_dataset():
             for i in range(data.shape[0]):
                 data[i] = data[i] - data_mean[i]
 
-        if f_images_norm is None:  
+        if f_images_norm is None:
             mean,    std     = np.mean(data), np.std(data)
             minimum, maximum = np.min(data),  np.max(data)
         else:
@@ -544,10 +544,10 @@ class make_dataset():
             mean,    std     = np.mean(data_norm), np.std(data_norm)
             minimum, maximum = np.min(data_norm),  np.max(data_norm)
             del data_norm
-        if verbose:  print('%.3f < T(all|log)  < %.3f'%(np.min(data), np.max(data))) 
+        if verbose:  print('%.3f < T(all|log)  < %.3f'%(np.min(data), np.max(data)))
         #data = 2*(data - minimum)/(maximum - minimum) - 1.0
         data = (data - mean)/std
-        if verbose:  print('%.3f < T(all|norm) < %.3f'%(np.min(data), np.max(data))) 
+        if verbose:  print('%.3f < T(all|norm) < %.3f'%(np.min(data), np.max(data)))
 
         # normalize params
         minimum = np.array([0.1, 0.6, 0.25, 0.25, 0.5, 0.5])
@@ -555,18 +555,18 @@ class make_dataset():
         params  = (params - minimum)/(maximum - minimum)
 
         # get the size and offset depending on the type of dataset
-        if   mode=='train':  
+        if   mode=='train':
             offset, size_sims = int(0.00*total_sims), int(0.90*total_sims)
-        elif mode=='valid':  
+        elif mode=='valid':
             offset, size_sims = int(0.90*total_sims), int(0.05*total_sims)
-        elif mode=='test':  
+        elif mode=='test':
             offset, size_sims = int(0.95*total_sims), int(0.05*total_sims)
-        elif mode=='all':  
+        elif mode=='all':
             offset, size_sims = int(0.00*total_sims), int(1.00*total_sims)
         else:    raise Exception('Wrong name!')
         size_maps = size_sims*splits
 
-        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a 
+        # randomly shuffle the simulations (not maps). Instead of 0 1 2 3...999 have a
         # random permutation. E.g. 5 9 0 29...342
         np.random.seed(seed)
         sim_numbers = np.arange(total_sims) #shuffle maps not rotations
@@ -587,7 +587,7 @@ class make_dataset():
 
         # define the matrix hosting all data with all rotations/flipping
         # together with the array containing the numbers of each map
-        data_all    = np.zeros((size_maps*8, data.shape[1], data.shape[2]), 
+        data_all    = np.zeros((size_maps*8, data.shape[1], data.shape[2]),
                                dtype=np.float32)
         params_all  = np.zeros((size_maps*8, params.shape[1]), dtype=np.float32)
 
@@ -603,7 +603,7 @@ class make_dataset():
             data_all[total_maps:total_maps+size_maps,:,:] = np.flip(data_rot, axis=1)
             params_all[total_maps:total_maps+size_maps]   = params
             total_maps += size_maps
-            
+
         if verbose:
             print('This set contains %d maps'%total_maps)
             print('%.3f < T (this set) < %.3f\n'%(np.min(data), np.max(data)))
@@ -622,10 +622,10 @@ class make_dataset():
 
 
 """
-# This class creates the dataset 
+# This class creates the dataset
 class make_dataset_mixed():
 
-    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm, 
+    def __init__(self, mode, seed, f_images, f_params, splits, f_images_norm,
                  monopole, verbose):
 
         # read the data
@@ -641,7 +641,7 @@ class make_dataset_mixed():
         # normalize maps
         if verbose:  print('%.3e < T(all|orig) < %.3e'%(np.min(data), np.max(data)))
         data = np.log10(data)
-        if f_images_norm is None:  
+        if f_images_norm is None:
             mean,    std     = np.mean(data), np.std(data)
             minimum, maximum = np.min(data),  np.max(data)
         else:
@@ -650,10 +650,10 @@ class make_dataset_mixed():
             mean,    std     = np.mean(data_norm), np.std(data_norm)
             minimum, maximum = np.min(data_norm),  np.max(data_norm)
             del data_norm
-        if verbose:  print('%.3f < T(all|log)  < %.3f'%(np.min(data), np.max(data))) 
+        if verbose:  print('%.3f < T(all|log)  < %.3f'%(np.min(data), np.max(data)))
         #data = 2*(data - minimum)/(maximum - minimum) - 1.0
         data = (data - mean)/std
-        if verbose:  print('%.3f < T(all|norm) < %.3f'%(np.min(data), np.max(data))) 
+        if verbose:  print('%.3f < T(all|norm) < %.3f'%(np.min(data), np.max(data)))
 
         # normalize params
         minimum = np.array([0.1, 0.6, 0.25, 0.25, 0.5, 0.5])
@@ -666,11 +666,11 @@ class make_dataset_mixed():
         train_maps, test_maps = unique_maps - 50*splits, 50*splits
         if    mode=='test2':  size = test_maps
         elif  mode=='all':    size = unique_maps
-        elif  mode=='train':  
+        elif  mode=='train':
             offset, size = int(train_maps*0.00), int(train_maps*0.70)
-        elif mode=='valid':  
+        elif mode=='valid':
             offset, size = int(train_maps*0.70), int(train_maps*0.15)
-        elif mode=='test':   
+        elif mode=='test':
             offset, size = int(train_maps*0.85), int(train_maps*0.15)
         else:    raise Exception('Wrong name!')
 
@@ -678,7 +678,7 @@ class make_dataset_mixed():
         if   mode=='test2':  indexes = np.arange(test_maps)
         elif mode=='all':    indexes = np.arange(unique_maps)
         else:
-            # randomly shuffle the maps. Instead of 0 1 2 3...999 have a 
+            # randomly shuffle the maps. Instead of 0 1 2 3...999 have a
             # random permutation. E.g. 5 9 0 29...342
             np.random.seed(seed)
             indexes = np.arange(test_maps, unique_maps) #shuffle maps not rotations
@@ -706,7 +706,7 @@ class make_dataset_mixed():
             data_all[total_maps:total_maps+size,:,:] = np.flip(data_rot, axis=1)
             params_all[total_maps:total_maps+size]   = params
             total_maps += size
-            
+
         if verbose:
             print('This set contains %d maps'%total_maps)
             print('%.3f < T (this set) < %.3f\n'%(np.min(data), np.max(data)))
@@ -735,9 +735,9 @@ class make_dataset_mixed():
 # f_images_norm -> images used to normalize the data (e.g. to compute mean and std)
 # monopole ------> Whether to remove the mean of each image or not
 # verbose -------> prints information about the progress
-def create_dataset(mode, seed, f_images, f_params, batch_size, splits, 
+def create_dataset(mode, seed, f_images, f_params, batch_size, splits,
                    f_images_norm=None, monopole=True, verbose=False):
-    data_set    = make_dataset(mode, seed, f_images, f_params, splits, f_images_norm, 
+    data_set    = make_dataset(mode, seed, f_images, f_params, splits, f_images_norm,
                                monopole, verbose)
     data_loader = DataLoader(dataset=data_set, batch_size=batch_size, shuffle=True)
     return data_loader
@@ -764,28 +764,28 @@ def create_dataset(mode, seed, f_images, f_params, batch_size, splits,
 #                  > if True, it will be faster and more efficient, but will use more
 #                  > memory. If False, the rotations and flippings are randomly done
 #                  > when calling the routine. For validation and testing always set it
-#                  > to True. When combining different fields as channels, set it to 
+#                  > to True. When combining different fields as channels, set it to
 #                  > False or it will not fit in memory.
 # shuffle ---------> whether randomly shuffle the data
 # just_monopole ---> whether redo images just containing the monopole (only for testing)
 # smoothing -------> smooth images with Gaussian kernel; integer with number of pixels
 # smoothing_norm --> the smoothing level of the maps used for the normalization
 # verbose ---------> prints information about the progress
-def create_dataset_multifield(mode, seed, f_images, f_params, batch_size, splits, 
-                              f_images_norm, num_workers=1, monopole=True, 
-                              monopole_norm=True, rot_flip_in_mem=True, shuffle=True, 
-                              just_monopole=False, smoothing=0, smoothing_norm=0, 
+def create_dataset_multifield(mode, seed, f_images, f_params, batch_size, splits,
+                              f_images_norm, num_workers=1, monopole=True,
+                              monopole_norm=True, rot_flip_in_mem=True, shuffle=True,
+                              just_monopole=False, smoothing=0, smoothing_norm=0,
                               verbose=False):
 
     # whether rotations and flippings are kept in memory
     if rot_flip_in_mem:
-        data_set = make_dataset_multifield(mode, seed, f_images, f_params, splits, 
-                                           f_images_norm, monopole, monopole_norm, 
-                                           just_monopole, smoothing, smoothing_norm, 
+        data_set = make_dataset_multifield(mode, seed, f_images, f_params, splits,
+                                           f_images_norm, monopole, monopole_norm,
+                                           just_monopole, smoothing, smoothing_norm,
                                            verbose)
     else:
-        data_set = make_dataset_multifield2(mode, seed, f_images, f_params, splits, 
-                                            f_images_norm, monopole, monopole_norm, 
+        data_set = make_dataset_multifield2(mode, seed, f_images, f_params, splits,
+                                            f_images_norm, monopole, monopole_norm,
                                             smoothing, smoothing_norm, verbose)
 
     data_loader = DataLoader(dataset=data_set, batch_size=batch_size, shuffle=shuffle,
@@ -793,13 +793,13 @@ def create_dataset_multifield(mode, seed, f_images, f_params, batch_size, splits
     return data_loader
 
 # This routine returns the maps, their parameters and their errors. Not really used
-def create_dataset_multifield2_errors(mode, seed, f_images, f_params, batch_size, 
-                                      splits, f_images_norm, study_name, storage_m, 
-                                      fields, root_files, label_m, arch, device, 
+def create_dataset_multifield2_errors(mode, seed, f_images, f_params, batch_size,
+                                      splits, f_images_norm, study_name, storage_m,
+                                      fields, root_files, label_m, arch, device,
                                       num_workers=1, shuffle=True, verbose=False):
 
-    data_set    = make_dataset_multifield2_errors(mode, seed, f_images, f_params, 
-                                    splits, f_images_norm, study_name, storage_m, 
+    data_set    = make_dataset_multifield2_errors(mode, seed, f_images, f_params,
+                                    splits, f_images_norm, study_name, storage_m,
                                     fields, root_files, label_m, arch, device, verbose)
 
     data_loader = DataLoader(dataset=data_set, batch_size=batch_size, shuffle=shuffle,
