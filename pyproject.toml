@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Default template for PDM package"
 authors = [
     {name = "towienko", email = "01169218@pw.edu.pl"},
+    {name = "WZarzecki", email = "wojciech.zarzecki.stud@pedu.pl"},
 ]
 dependencies = [
     "numpy>=2.2.1",
