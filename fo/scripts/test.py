@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from typing import OrderedDict
 import numpy as np
 import sys, os, time
@@ -144,11 +145,14 @@ def get_results(study_name, storage, arch, channels, device, root_files, test_lo
 
 
 ##################################### INPUT ##########################################
+parser = ArgumentParser()
+parser.add_argument("--arch", "-a", required=True)
+args = parser.parse_args()
 PROJECT_DIR = Path(fo.__file__).parents[1]
 print(f"PROJECT_DIR = {PROJECT_DIR}")
 # architecture parameters
 # arch  = 'o3'
-arch  = 'resnet18'
+arch  = args.arch
 
 # properties of the network/maps used for training
 sim_train       = 'IllustrisTNG'

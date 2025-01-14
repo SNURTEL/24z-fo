@@ -10,6 +10,7 @@ import torch.nn as nn
 import fo.data as data
 import fo.architecture as architecture
 import torch.backends.cudnn as cudnn
+from argparse import ArgumentParser
 import optuna
 import fo
 import fo.utils as U
@@ -239,12 +240,19 @@ class Objective(object):
 
 
 ##################################### INPUT ##########################################
+parser = ArgumentParser()
+parser.add_argument("--arch", "-a", required=True)
+parser.add_argument("--epochs", "-e", required=True, type=int)
+parser.add_argument("--trials", "-t", required=True, type=int)
+parser.add_argument("--pretrained", "-p", action='store_true')
+args = parser.parse_args()
 PROJECT_DIR = Path(fo.__file__).parents[1]
 print(f"PROJECT_DIR = {PROJECT_DIR}")
 
 # architecture parameters
 # arch  = 'o3'
-arch  = 'resnet18'
+# arch  = 'resnet18'
+arch  = args.arch
 beta1 = 0.5
 beta2 = 0.999
 
@@ -278,17 +286,17 @@ rot_flip_in_mem = False  #whether rotations and flipings are kept in memory
 smoothing       = 2  #Gaussian smoothing in pixels units
 label           = 'all_steps_500_500_%s_smoothing_%d'%(arch,smoothing)
 #label           = 'all_steps_500_500_%s'%arch
-resnet_pretrained = True
+resnet_pretrained = args.pretrained
 
 # training parameters
 batch_size  = 128
 min_lr      = 1e-9
-epochs      = 200
+epochs      = args.epochs
 num_workers = 12    #number of workers to load data
 
 # optuna parameters
 study_name = 'wd_dr_hidden_lr_%s'%arch
-n_trials   = 50
+n_trials   = args.trials
 
 # dump all params
 d = dir()

@@ -6,6 +6,7 @@ import sys, os, time, optuna
 def best_params_database(study_name, storage):
 
     # load the optuna study
+    print("DUPA", study_name, storage)
     study = optuna.load_study(study_name=study_name, storage=storage)
 
     # get the scores of the study trials
