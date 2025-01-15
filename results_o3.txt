@@ -1,0 +1,59 @@
+PROJECT_DIR = /home/tomek/fo
+CUDA Available
+
+############# Trained on T IllustrisTNG ##################
+############# Testing on T IllustrisTNG ##################
+Found 1 channels
+Reading data...
+1.502e+03 < F(all|orig) < 8.323e+07
+Smoothing images with smoothing length: 2
+3.180 < F(all|resc)  < 7.781
+Smoothing images with smoothing length: 2
+-1.357 < F(all|norm) < 4.379
+Channel 0 contains 6000 maps
+-1.313 < F < 4.086
+
+DUPA wd_dr_hidden_lr_o3 sqlite:////home/tomek/fo/optuna/databases_IllustrisTNG/o3_T_all_steps_500_500_o3_smoothing_2.db
+
+Trial number 10
+Value: -1.14909e+01
+ Params: 
+    lr: 0.005
+    wd: 2.71e-06
+    dr: 0.384
+    hidden: 8
+total number of parameters in the model = 15045900
+Loading model...
+
+Number of maps in the test set: 6000
+Test loss = -1.158e+01
+
+Normalized Error Omega_m = 0.042
+Normalized Error sigma_8 = 0.094
+Normalized Error A_SN1   = 0.140
+Normalized Error A_AGN1  = 0.314
+Normalized Error A_SN2   = 0.111
+Normalized Error A_AGN2  = 0.233
+
+Error Omega_m = 0.017
+Error sigma_8 = 0.038
+Error A_SN1   = 0.526
+Error A_AGN1  = 1.178
+Error A_SN2   = 0.167
+Error A_AGN2  = 0.349
+
+Bayesian error Omega_m = 0.021
+Bayesian error sigma_8 = 0.039
+Bayesian error A_SN1   = 0.501
+Bayesian error A_AGN1  = 1.068
+Bayesian error A_SN2   = 0.159
+Bayesian error A_AGN2  = 0.333
+
+Relative error Omega_m = 0.052
+Relative error sigma_8 = 0.047
+Relative error A_SN1   = 0.570
+Relative error A_AGN1  = 1.996
+Relative error A_SN2   = 0.203
+Relative error A_AGN2  = 0.443
+
+############################################

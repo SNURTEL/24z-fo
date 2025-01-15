@@ -2,13 +2,13 @@
 
 set -o xtrace
 
-EPOCHS=30
-TRIALS=10
+EPOCHS=80
+TRIALS=1
 
 python -m fo.scripts.train -a o3 -e $EPOCHS -t $TRIALS ;
 echo "run1";
-python -m fo.scripts.train -a resnet18 -e $EPOCHS -t $TRIALS ;
-echo "run2";
+# python -m fo.scripts.train -a resnet18 -e $EPOCHS -t $TRIALS ;
+# echo "run2";
 python -m fo.scripts.train -a resnet18 -e $EPOCHS -t $TRIALS -p;
 echo "run3";
 
