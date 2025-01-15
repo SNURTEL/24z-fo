@@ -1,8 +1,15 @@
-python -m fo.scripts.train -a o3 -e 30 -t 2 ;
+#!/usr/bin/env bash
+
+set -o xtrace
+
+EPOCHS=30
+TRIALS=10
+
+python -m fo.scripts.train -a o3 -e $EPOCHS -t $TRIALS ;
 echo "run1";
-python -m fo.scripts.train -a resnet18 -e 30 -t 2 ;
+python -m fo.scripts.train -a resnet18 -e $EPOCHS -t $TRIALS ;
 echo "run2";
-python -m fo.scripts.train -a resnet18 -e 30 -t 2 -p;
+python -m fo.scripts.train -a resnet18 -e $EPOCHS -t $TRIALS -p;
 echo "run3";
 
 python -m fo.scripts.test -a o3 > results_o3.txt ;

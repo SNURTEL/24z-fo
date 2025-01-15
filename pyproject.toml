@@ -1,10 +1,10 @@
 [project]
 name = "fo"
-version = "0.1.0"
-description = "Default template for PDM package"
+version = "1.0.0"
+description = "Cosmological and astrophysical parameter inference using the CAMELS Multifield Dataset"
 authors = [
-    {name = "towienko", email = "01169218@pw.edu.pl"},
-    {name = "WZarzecki", email = "wojciech.zarzecki.stud@pedu.pl"},
+    {name = "towienko", email = "tomasz.owienko.stud@pw.edu.pl"},
+    {name = "WZarzecki", email = "wojciech.zarzecki.stud@pw.edu.pl"},
 ]
 dependencies = [
     "numpy>=2.2.1",
@@ -26,3 +26,65 @@ distribution = false
 [tool.pdm.scripts]
 train = "python3 -m fo.scripts.train"
 test = "python3 -m fo.scripts.test"
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+target-version = "py311"
+indent-width = 4
+line-length = 120
+
+[tool.ruff.lint]
+# By default, Ruff enables Flake8's E and F rules
+# Pyflakes - F, pycodestyle - E, W
+# flake8-builtins - A
+# Pylint - PLC, PLE, PLW
+# isort - I
+select = ['E', 'F', 'W', 'A', 'PLC', 'PLE', 'PLW', 'I']
+ignore = [
+    # LineTooLong
+    "E501",
+    # DoNotAssignLambda
+    "E731",
+]
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
