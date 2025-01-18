@@ -6,16 +6,21 @@ The [CAMELS project](https://camels.readthedocs.io/en/latest/)
 
 ### Setup
 
+Setup the project:
+
 ```shell
 pdm install
 ```
 
-Download dataset files from [url](https://users.flatironinstitute.org/~fvillaescusa/priv/DEPnzxoWlaTQ6CjrXqsm0vYi8L7Jy/CMD/2D_maps/data/) and place them under `data/<SIM>/`
- directory.
+Fetch the data:
+
+```shell
+make data
+```
 
 ### Training
 
-Edit param values in `INPUT` section of `fo/scripts/train.py` (lol). Refer to [CMD docs](https://camels-multifield-dataset.readthedocs.io/en/latest/index.html) for details.
+Edit param values in `INPUT` section of `fo/scripts/train.py`. Refer to [CMD docs](https://camels-multifield-dataset.readthedocs.io/en/latest/index.html) for details.
 
 Then:
 
